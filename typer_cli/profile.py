@@ -32,7 +32,7 @@ def create_profile(name):
     data = {
         "name": name,
         "created": datetime.now().isoformat(),
-        "files": {},
+        "progress": {},
         "tests": [],
     }
     write_profile(data)
@@ -88,14 +88,14 @@ def update_file_progress(result, filename):
     p = read_profile()
     hash = compute_hash(filename)
 
-    p["files"][hash] = p["files"].get(hash, 0) + result["chars"]
+    p["progress"][hash] = p["progress"].get(hash, 0) + result["chars"]
     write_profile(p)
 
 def read_file_progress(filename):
     p = read_profile()
     hash = compute_hash(filename)
 
-    return p["files"].get(hash, 0)
+    return p["progress"].get(hash, 0)
 
 # ── stats computation ────────────────────────────────────────────────────────
 
