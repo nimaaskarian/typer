@@ -1,4 +1,5 @@
 import curses
+import re
 import time
 import argparse
 import pathlib
@@ -131,46 +132,50 @@ def draw_settings(scr, y, w, ti, di, locked):
 def calc_wpm(target, typed, elapsed, typed_init):
     if elapsed < 0.5:
         return "-"
-    ok = sum(1 for i in range(min(len(typed)-typed_init, len(target))) if typed[i] == target[i])
+    ok = sum(1 for i in range(typed_init, min(len(typed), len(target))) if typed[i] == target[i])
     return f"{(ok / 5) / (elapsed / 60):.0f}"
 
 
-def calc_acc(target, typed, keystrokes, errors, strict):
+def calc_acc(target, typed, keystrokes, errors, strict, typed_init):
     if strict:
         if not keystrokes:
             return "-"
         return f"{(keystrokes - errors) / keystrokes * 100:.1f}%"
     if not typed:
         return "-"
-    ok = sum(1 for i in range(min(len(typed), len(target))) if typed[i] == target[i])
+    ok = sum(1 for i in range(typed_init, min(len(typed), len(target))) if typed[i] == target[i])
     return f"{ok / len(typed) * 100:.1f}%"
 
 
-def calc_results(target, typed, elapsed, keystrokes, errors, strict=False):
-    n = min(len(typed), len(target))
-    ok = sum(1 for i in range(n) if typed[i] == target[i])
-    bad = n - ok
-    w = (ok / 5) / (elapsed / 60) if elapsed > 0 else 0
-    if strict:
-        # monkeytype-style: every mistyped key counts, even if corrected
-        rw = (keystrokes / 5) / (elapsed / 60) if elapsed > 0 else 0
-        a = ((keystrokes - errors) / keystrokes * 100) if keystrokes else 0
+def calc_results(target, typed, elapsed, keystrokes, errors, typed_init, strict=False):
+    count_typed = len(typed) - typed_init
+    if count_typed == 0:
+        return dict(wpm=0, raw=0, acc=0, ok=0, bad=0, missed=0, chars=0)
     else:
-        # lenient: only the final on-screen characters are scored
-        rw = (len(typed) / 5) / (elapsed / 60) if elapsed > 0 else 0
-        a = (ok / len(typed) * 100) if typed else 0
-    errs = {}
-    for i in range(n):
-        if typed[i] != target[i]:
-            errs[target[i]] = errs.get(target[i], 0) + 1
-    return dict(wpm=w, raw=rw, acc=a, ok=ok, bad=bad,
-                missed=max(0, len(target) - len(typed)),
-                chars=len(typed), time=elapsed, errs=errs)
+        n = min(len(typed), len(target))
+        ok = sum(1 for i in range(typed_init, n) if typed[i] == target[i])
+        bad = n - ok - typed_init
+        w = (ok / 5) / (elapsed / 60) if elapsed > 0 else 0
+        if strict:
+            # monkeytype-style: every mistyped key counts, even if corrected
+            rw = (keystrokes / 5) / (elapsed / 60) if elapsed > 0 else 0
+            a = ((keystrokes - errors) / keystrokes * 100) if keystrokes else 0
+        else:
+            # lenient: only the final on-screen characters are scored
+            rw = (count_typed / 5) / (elapsed / 60) if elapsed > 0 else 0
+            a = (ok / count_typed * 100) if typed else 0
+        errs = {}
+        for i in range(typed_init, n):
+            if typed[i] != target[i]:
+                errs[target[i]] = errs.get(target[i], 0) + 1
+        return dict(wpm=w, raw=rw, acc=a, ok=ok, bad=bad,
+                    missed=max(0, len(target) - count_typed),
+                    chars=count_typed, time=elapsed, errs=errs)
 
 
 def draw_stats(scr, y, w, target, typed, elapsed, remain, keystrokes, errors, strict, typed_init):
     _wpm = calc_wpm(target, typed, elapsed, typed_init)
-    _acc = calc_acc(target, typed, keystrokes, errors, strict)
+    _acc = calc_acc(target, typed, keystrokes, errors, strict,  typed_init)
     ts = f"{max(0, remain):.0f}s"
 
     # build the bar as: "  30 wpm   100.0% acc   24s  "
@@ -451,7 +456,7 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
     sys.stdout.write("\033[0 q")
     sys.stdout.flush()
     elapsed = time.time() - t0 if started else 0.001
-    return calc_results(target, typed, elapsed, keystrokes, errors, strict), ti, di, theme_name
+    return calc_results(target, typed, elapsed, keystrokes, errors, typed_init, strict), ti, di, theme_name
 
 
 # ── name prompt ──────────────────────────────────────────────────────────────
@@ -793,7 +798,8 @@ def run(scr, args):
     target = ""
     if args.file is not None:
         with open(args.file) as fp:
-            target = fp.read().strip()
+            # replace all whitespaces with space so it can be typed.
+            target = re.sub(r'\s', ' ', fp.read().strip())
     if args.progress:
         typed = list(target[:read_file_progress(args.file)])
     else:
