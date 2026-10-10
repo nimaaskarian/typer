@@ -302,7 +302,7 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
             if update_info and update_info["update_available"]:
                 notice = f"v{update_info['latest']} available: {update_info['update_cmd']}"
                 putc(scr, h - 2, w, notice, C_BAD)
-            putc(scr, h - 1, w, "s stats   t theme   tab new words   esc quit", C_HINT)
+            putc(scr, h - 1, w, "ctrl+s stats   ctrl+t theme   tab new words   esc quit", C_HINT)
             ver = f"v{update_info['version']}" if update_info else ""
             if ver:
                 put(scr, h - 1, 1, ver, C_DIM)
@@ -367,19 +367,24 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
             except curses.error:
                 pass
             continue
-
+        def shift_theme(theme_name, n):
+            idx = THEME_NAMES.index(theme_name)
+            theme_name = THEME_NAMES[(idx + n) % len(THEME_NAMES)]
+            init_colors(theme_name)
+            set_theme(theme_name)
+            return theme_name
         if not started:
             if k == 27:  # esc
                 sys.stdout.write("\033[0 q")
                 sys.stdout.flush()
                 return None, ti, di, theme_name
-            if k == ord('s'):
+            if k == ord('s') & 0x1f: # with ctrl mask
                 return "stats", ti, di, theme_name
-            if k == ord('t'):
-                idx = THEME_NAMES.index(theme_name)
-                theme_name = THEME_NAMES[(idx + 1) % len(THEME_NAMES)]
-                init_colors(theme_name)
-                set_theme(theme_name)
+            if k == ord('t') & 0x1f: # with ctrl mask
+                theme_name = shift_theme(theme_name, 1)
+                continue
+            if k == ord('r') & 0x1f: # with ctrl mask
+                theme_name = shift_theme(theme_name, -1)
                 continue
             # arrow keys for settings
             if k == curses.KEY_LEFT:
