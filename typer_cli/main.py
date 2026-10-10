@@ -799,7 +799,7 @@ def run(scr, args):
     if args.file is not None:
         with open(args.file) as fp:
             # replace all whitespaces with space so it can be typed.
-            target = re.sub(r'\s', ' ', fp.read().strip())
+            target = re.sub(r'\s+', ' ', fp.read().strip())
     if args.progress:
         typed = list(target[:read_file_progress(args.file)])
     else:
