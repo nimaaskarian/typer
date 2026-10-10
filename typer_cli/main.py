@@ -1,5 +1,6 @@
 import curses
 import re
+import locale
 import time
 import argparse
 import pathlib
@@ -263,8 +264,8 @@ def update_screen_size(scr, logo, started, target_words):
 
 def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo=LOGO, target="", typed=[]):
     curses.curs_set(0)
-    scr.nodelay(True)
-    scr.timeout(50)
+    scr.nodelay(False)
+    scr.timeout(-1)
     curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
 
     tlimit = TIMES[ti]
@@ -344,10 +345,12 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
         scr.refresh()
 
         # ── input ──
-        k = scr.getch()
+        k = scr.get_wch()
         if k == -1:
             continue
-        if k == 9:  # tab
+        if k == '\x1b': #escape
+            return None, ti, di, theme_name
+        if k == '\t':  # tab
             sys.stdout.write("\033[0 q")
             sys.stdout.flush()
             return "restart", ti, di, theme_name
@@ -422,12 +425,12 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
                 target = generate(max(80, tlimit * 3), DIFFS[di])
                 typed = []
                 continue
+            else:
+                started = True
+                update_screen_size(scr, logo, started, target_words)
+                t0 = time.time()
 
         # typing
-        if not started and 32 <= k <= 126:
-            started = True
-            update_screen_size(scr, logo, started, target_words)
-            t0 = time.time()
 
         if k in (curses.KEY_BACKSPACE, 127, 8):
             if typed:
@@ -446,12 +449,12 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
                 else:
                     while len(typed) <= next_space and len(typed) < len(target):
                         typed.append(' ')
-        elif 32 <= k <= 126 and len(typed) < len(target):
+        elif len(typed) < len(target):
             pos = len(typed)
             keystrokes += 1
-            if chr(k) != target[pos]:
+            if k != target[pos]:
                 errors += 1
-            typed.append(chr(k))
+            typed.append(k)
 
     sys.stdout.write("\033[0 q")
     sys.stdout.flush()
@@ -780,6 +783,7 @@ def run(scr, args):
     if theme_name not in THEMES:
         theme_name = "default"
     init_colors(theme_name)
+    locale.setlocale(locale.LC_ALL, "")
     curses.curs_set(0)
 
     # first-launch: prompt for name
@@ -797,9 +801,15 @@ def run(scr, args):
 
     target = ""
     if args.file is not None:
+        import unicodedata
         with open(args.file) as fp:
-            # replace all whitespaces with space so it can be typed.
-            target = re.sub(r'\s+', ' ', fp.read().strip())
+            # replace all whitespaces with space, and convert all to sane typeable unicode data.
+            target = unicodedata.normalize('NFKC', re.sub(r'\s+', ' ', fp.read().strip()).translate(str.maketrans({
+    '“': '"', '”': '"',
+    '‘': "'", '’': "'",
+    '—': '-', '–': '-',
+    '…': '...',
+})))
     if args.progress:
         typed = list(target[:read_file_progress(args.file)])
     else:
