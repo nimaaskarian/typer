@@ -258,7 +258,7 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
         now = time.time()
         elapsed = (now - t0) if started else 0.0
         remain = tlimit - elapsed
-        done = started and elapsed >= tlimit
+        done = (started and elapsed >= tlimit) or (len(typed) == len(target))
         if done:
             break
 
@@ -779,7 +779,7 @@ def run(scr, args):
     target = ""
     if args.file is not None:
         with open(args.file) as fp:
-            target = fp.read()
+            target = fp.read().strip()
 
     logo = LOGO
     if args.logo is not None:
