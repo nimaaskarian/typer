@@ -34,6 +34,7 @@ typer -t 15 -d easy # quick easy warmup
 typer -s           # strict accuracy (corrected mistakes still count)
 typer -f filename  # type contents of `filename` instead of generated sentences
 typer -l logo      # use contents of `filename` for logo
+typer -P           # save and load progress on `file`
 ```
 
 By default, mistakes you fix don't hurt your accuracy. With `-s`/`--strict`,

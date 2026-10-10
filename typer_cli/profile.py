@@ -32,6 +32,7 @@ def create_profile(name):
     data = {
         "name": name,
         "created": datetime.now().isoformat(),
+        "files": {},
         "tests": [],
     }
     write_profile(data)
@@ -71,6 +72,30 @@ def append_test(result, time_limit, difficulty):
     })
     write_profile(p)
 
+def compute_hash(filename):
+    from hashlib import md5
+    md5 = md5()
+    BUF_SIZE = 65536
+    with open(filename, 'rb') as fp:
+        while True:
+            data = fp.read(BUF_SIZE)
+            if not data:
+                break
+            md5.update(data)
+    return md5.hexdigest()
+
+def update_file_progress(result, filename):
+    p = read_profile()
+    hash = compute_hash(filename)
+
+    p["files"][hash] = p["files"].get(hash, 0) + result["chars"]
+    write_profile(p)
+
+def read_file_progress(filename):
+    p = read_profile()
+    hash = compute_hash(filename)
+
+    return p["files"].get(hash, 0)
 
 # ── stats computation ────────────────────────────────────────────────────────
 

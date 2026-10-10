@@ -8,7 +8,7 @@ from typer_cli.sentences import generate
 from typer_cli.update import get_update_info
 from typer_cli.profile import (
     profile_exists, read_profile, create_profile, append_test,
-    post_race_stats, get_theme, set_theme,
+    post_race_stats, get_theme, set_theme, update_file_progress, read_file_progress
 )
 from typer_cli.themes import THEMES, THEME_NAMES
 
@@ -128,10 +128,10 @@ def draw_settings(scr, y, w, ti, di, locked):
 
 # ── stats helpers ────────────────────────────────────────────────────────────
 
-def calc_wpm(target, typed, elapsed):
+def calc_wpm(target, typed, elapsed, typed_init):
     if elapsed < 0.5:
         return "-"
-    ok = sum(1 for i in range(min(len(typed), len(target))) if typed[i] == target[i])
+    ok = sum(1 for i in range(min(len(typed)-typed_init, len(target))) if typed[i] == target[i])
     return f"{(ok / 5) / (elapsed / 60):.0f}"
 
 
@@ -168,8 +168,8 @@ def calc_results(target, typed, elapsed, keystrokes, errors, strict=False):
                 chars=len(typed), time=elapsed, errs=errs)
 
 
-def draw_stats(scr, y, w, target, typed, elapsed, remain, keystrokes, errors, strict):
-    _wpm = calc_wpm(target, typed, elapsed)
+def draw_stats(scr, y, w, target, typed, elapsed, remain, keystrokes, errors, strict, typed_init):
+    _wpm = calc_wpm(target, typed, elapsed, typed_init)
     _acc = calc_acc(target, typed, keystrokes, errors, strict)
     ts = f"{max(0, remain):.0f}s"
 
@@ -233,7 +233,7 @@ def draw_text(scr, lines, typed, target, sy, sx, aw, sh):
 
 # ── main test loop ───────────────────────────────────────────────────────────
 
-def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo=LOGO, target=""):
+def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo=LOGO, target="", typed=[]):
     curses.curs_set(0)
     scr.nodelay(True)
     scr.timeout(50)
@@ -244,7 +244,7 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
     wc = max(80, tlimit * 3)
     if target == "":
         target = generate(wc, diff)
-    typed = []
+    typed_init = len(typed)
     keystrokes = 0
     errors = 0
     started = False
@@ -313,7 +313,7 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
             if user_name:
                 put(scr, h - 1, w - len(user_name) - 1, user_name, C_DIM)
         else:
-            draw_stats(scr, stats_y, w, target, typed, elapsed, remain, keystrokes, errors, strict)
+            draw_stats(scr, stats_y, w, target, typed, elapsed, remain, keystrokes, errors, strict, typed_init)
             cpos = draw_text(scr, lines, typed, target, text_y, tx, aw, h)
             putc(scr, h - 1, w, "tab restart", C_HINT)
 
@@ -785,13 +785,17 @@ def run(scr, args):
     if args.file is not None:
         with open(args.file) as fp:
             target = fp.read().strip()
+    if args.progress:
+        typed = list(target[:read_file_progress(args.file)])
+    else:
+        typed = []
 
     logo = LOGO
     if args.logo is not None:
         with open(args.logo) as fp:
             logo = fp.read().splitlines()
     while True:
-        result, ti, di, theme_name = test(scr, ti, di, update_info, theme_name, args.strict, logo, target)
+        result, ti, di, theme_name = test(scr, ti, di, update_info, theme_name, args.strict, logo, target, typed=typed)
 
         if result is None:
             return
@@ -803,6 +807,8 @@ def run(scr, args):
 
         # completed test — save, compute leaderboard, show results
         append_test(result, TIMES[ti], DIFFS[di])
+        if args.progress:
+            update_file_progress(result, args.file)
         race = post_race_stats(result['wpm'])
         show_results(scr, result, ti, di, race)
         continue
@@ -824,7 +830,11 @@ def entry():
                         help="a file to type from", default=None)
     parser.add_argument("-l", "--logo", type=pathlib.Path,
                         help="a file to the logo", default=None)
+    parser.add_argument("-P", "--progress", action="store_true",
+                        help="save and load progress of the target file and continue from last typed", default=None)
     args = parser.parse_args()
+    if args.progress and not args.file:
+        parser.error("--file is required when --save-progress is specified")
 
     try:
         curses.wrapper(lambda scr: run(scr, args))
