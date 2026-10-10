@@ -64,6 +64,12 @@ THEMES = {
         C_TITLE: (230, -1), C_BORDER: (240, -1), C_GOOD: (64, -1),
         C_BAD: (160, -1), C_HINT: (246, -1),
     },
+    "base16": {
+        C_DIM: (8, -1), C_OK: (114, -1), C_ERR: (1, -1),
+        C_CURSOR: (0, 3), C_ACCENT: (3, -1), C_STAT: (5, -1),
+        C_TITLE: (2, -1), C_BORDER: (3, -1), C_GOOD: (2, -1),
+        C_BAD: (1, -1), C_HINT: (8, -1),
+    },
 }
 
 THEME_NAMES = list(THEMES.keys())

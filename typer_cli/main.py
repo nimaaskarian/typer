@@ -1,6 +1,7 @@
 import curses
 import time
 import argparse
+import pathlib
 import sys
 
 from typer_cli.sentences import generate
@@ -79,11 +80,9 @@ LOGO = [
     "  ▐█▌·▐█▀·.▐█▪·•▐█▄▄▌▐█•█▌",
     "  ▀▀▀  ▀ •  .▀    ▀▀▀ .▀  ▀",
 ]
-LOGO_H = len(LOGO)
 
-
-def draw_logo(win, y, w):
-    for i, line in enumerate(LOGO):
+def draw_logo(win, y, w, logo):
+    for i, line in enumerate(logo):
         putc(win, y + i, w, line, C_ACCENT, curses.A_BOLD)
 
 
@@ -234,7 +233,7 @@ def draw_text(scr, lines, typed, target, sy, sx, aw, sh):
 
 # ── main test loop ───────────────────────────────────────────────────────────
 
-def test(scr, ti, di, update_info=None, theme_name="default", strict=False):
+def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo=LOGO, target=""):
     curses.curs_set(0)
     scr.nodelay(True)
     scr.timeout(50)
@@ -243,7 +242,8 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False):
     tlimit = TIMES[ti]
     diff = DIFFS[di]
     wc = max(80, tlimit * 3)
-    target = generate(wc, diff)
+    if target == "":
+        target = generate(wc, diff)
     typed = []
     keystrokes = 0
     errors = 0
@@ -283,7 +283,7 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False):
             # place logo, settings, timer ABOVE the text
             timer_y = text_y - 2
             settings_y = timer_y - 2
-            logo_y = settings_y - LOGO_H - 1
+            logo_y = settings_y - len(logo) - 1
             hint_y = text_y + text_vis + 1
         else:
             # place stats ABOVE the text
@@ -294,7 +294,7 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False):
 
         # ── draw ──
         if not started:
-            draw_logo(scr, logo_y, w)
+            draw_logo(scr, logo_y, w, logo)
             hit_regions = draw_settings(scr, settings_y, w, ti, di, False)
             putc(scr, timer_y, w, f"{tlimit}s", C_ACCENT, curses.A_BOLD)
             cpos = draw_text(scr, lines, typed, target, text_y, tx, aw, h)
@@ -360,7 +360,7 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False):
                                     diff = DIFFS[di]
                                     changed = True
                                 if changed:
-                                    target = generate(max(80, tlimit * 3), DIFFS[di])
+                                    target = generate(max(80, tlimit * 3), DIFFS[di]) # not this
                                     typed = []
                                     lines = wrap(target, aw)
                                 break
@@ -776,8 +776,17 @@ def run(scr, args):
     ti = TIMES.index(args.time) if args.time and args.time in TIMES else 1
     di = DIFFS.index(args.diff) if args.diff and args.diff in DIFFS else 1
 
+    target = ""
+    if args.file is not None:
+        with open(args.file) as fp:
+            target = fp.read()
+
+    logo = LOGO
+    if args.logo is not None:
+        with open(args.logo) as fp:
+            logo = fp.read().splitlines()
     while True:
-        result, ti, di, theme_name = test(scr, ti, di, update_info, theme_name, args.strict)
+        result, ti, di, theme_name = test(scr, ti, di, update_info, theme_name, args.strict, logo, target)
 
         if result is None:
             return
@@ -806,6 +815,10 @@ def entry():
                         help="difficulty (easy, medium, hard)")
     parser.add_argument("-s", "--strict", action="store_true",
                         help="strict accuracy: corrected mistakes still count against you")
+    parser.add_argument("-f", "--file", type=pathlib.Path,
+                        help="a file to type from", default=None)
+    parser.add_argument("-l", "--logo", type=pathlib.Path,
+                        help="a file to the logo", default=None)
     args = parser.parse_args()
 
     try:
