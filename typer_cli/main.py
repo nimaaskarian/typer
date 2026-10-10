@@ -56,9 +56,9 @@ def hline(win, y, x, n, cp=C_BORDER):
     put(win, y, x, "-" * n, cp)
 
 
-def wrap(text, width):
+def wrap(target_words, width):
     lines, cur = [], ""
-    for word in text.split(" "):
+    for word in target_words:
         test = f"{cur} {word}" if cur else word
         if len(test) <= width:
             cur = test
@@ -230,6 +230,29 @@ def draw_text(scr, lines, typed, target, sy, sx, aw, sh):
         off += len(line) + 1
     return cursor_pos
 
+# helper function for updating screen size variables
+
+def update_screen_size(scr, logo, started, target_words):
+    global h, w, aw,lines, text_vis, text_y, timer_y, settings_y, logo_y, stats_y, hint_y, tx
+    h, w = scr.getmaxyx()
+    aw = min(w - 6, 90)
+    lines = wrap(target_words, aw)
+    # ── responsive text width ──
+    text_vis = min(3, len(lines))
+    # ── compute layout — text stays fixed at vertical center ──
+    text_y = max(1, (h - text_vis) // 2)
+    if not started:
+        # place logo, settings, timer ABOVE the text
+        timer_y = text_y - 2
+        settings_y = timer_y - 2
+        logo_y = settings_y - len(logo) - 1
+        hint_y = text_y + text_vis + 1
+    else:
+        # place stats ABOVE the text
+        stats_y = text_y - 2
+        hint_y = text_y + text_vis + 1
+
+    tx = cx(w, aw)
 
 # ── main test loop ───────────────────────────────────────────────────────────
 
@@ -245,14 +268,17 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
     if target == "":
         target = generate(wc, diff)
     typed_init = len(typed)
+    target_words = target.split()
     keystrokes = 0
     errors = 0
     started = False
     t0 = 0.0
 
-    settings_y = 0
     hit_regions = []
     user_name = read_profile().get("name", "")
+
+    global h, w, aw,lines, text_vis, text_y, timer_y, settings_y, logo_y, stats_y, hint_y, tx
+    update_screen_size(scr, logo, started, target_words)
 
     while True:
         now = time.time()
@@ -270,27 +296,6 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
             if scr.getch() == 27:  # esc
                 return None, ti, di, theme_name
             continue
-
-        # ── responsive text width ──
-        aw = min(w - 6, 90)
-        lines = wrap(target, aw)
-        text_vis = min(3, len(lines))
-
-        # ── compute layout — text stays fixed at vertical center ──
-        text_y = max(1, (h - text_vis) // 2)
-
-        if not started:
-            # place logo, settings, timer ABOVE the text
-            timer_y = text_y - 2
-            settings_y = timer_y - 2
-            logo_y = settings_y - len(logo) - 1
-            hint_y = text_y + text_vis + 1
-        else:
-            # place stats ABOVE the text
-            stats_y = text_y - 2
-            hint_y = text_y + text_vis + 1
-
-        tx = cx(w, aw)
 
         # ── draw ──
         if not started:
@@ -361,8 +366,9 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
                                     changed = True
                                 if changed:
                                     target = generate(max(80, tlimit * 3), DIFFS[di]) # not this
+                                    target_words = target.split(" ")
                                     typed = []
-                                    lines = wrap(target, aw)
+                                    lines = wrap(target_words, aw)
                                 break
             except curses.error:
                 pass
@@ -374,6 +380,8 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
             set_theme(theme_name)
             return theme_name
         if not started:
+            if k == curses.KEY_RESIZE:
+                update_screen_size(scr, logo, started, target_words)
             if k == 27:  # esc
                 sys.stdout.write("\033[0 q")
                 sys.stdout.flush()
@@ -413,6 +421,7 @@ def test(scr, ti, di, update_info=None, theme_name="default", strict=False, logo
         # typing
         if not started and 32 <= k <= 126:
             started = True
+            update_screen_size(scr, logo, started, target_words)
             t0 = time.time()
 
         if k in (curses.KEY_BACKSPACE, 127, 8):
